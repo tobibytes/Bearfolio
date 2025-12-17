@@ -95,6 +95,22 @@ builder.Services.AddAuthentication(options =>
 builder.Services.AddAuthorization();
 builder.Services.AddAuthorizationPolicies();
 
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("frontend", policy =>
+    {
+        var origins = builder.Configuration["Cors:Origins"]?.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (origins is { Length: > 0 })
+        {
+            policy.WithOrigins(origins).AllowAnyHeader().AllowAnyMethod().AllowCredentials();
+        }
+        else
+        {
+            policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod();
+        }
+    });
+});
+
 builder.Services
     .AddGraphQLServer()
     .AddAuthorization()
@@ -115,6 +131,7 @@ builder.Services.AddHttpClient<EmbeddingService>();
 builder.Services.AddScoped<EmailService>();
 builder.Services.AddScoped<SearchService>();
 builder.Services.AddHttpClient();
+builder.Services.AddControllers();
 
 builder.Services.AddHostedService<EmbeddingWorker>();
 builder.Services.AddHostedService<CleanupWorker>();
@@ -148,7 +165,9 @@ app.UseSerilogRequestLogging();
 app.UseRouting();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseCors("frontend");
 
+app.MapControllers();
 app.MapGraphQL("/graphql");
 app.MapHealthEndpoints();
 app.MapGet("/", () => Results.Redirect("/graphql"));

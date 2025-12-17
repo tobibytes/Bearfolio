@@ -23,6 +23,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("exchange")]
+    [HttpPost("/exchange")] // backwards-compat for clients calling root-level /exchange
     public async Task<IActionResult> Exchange([FromBody] TokenRequest request, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(request.IdToken))
