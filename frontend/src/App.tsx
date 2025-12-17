@@ -1,29 +1,35 @@
 import { Routes, Route } from 'react-router-dom';
-import Header from './components/Header';
-import Footer from './components/Footer';
-import LandingPage from './pages/LandingPage';
-import DashboardPage from './pages/DashboardPage';
-import ProjectsPage from './pages/ProjectsPage';
-import ProjectDetailPage from './pages/ProjectDetailPage';
-import ProfilePage from './pages/ProfilePage';
-import AuthPage from './pages/AuthPage';
+import Landing from './routes/Landing';
+import Students from './routes/Students';
+import StudentProfile from './routes/StudentProfile';
+import PortfolioDetail from './routes/PortfolioDetail';
+import Opportunities from './routes/Opportunities';
+import OpportunityDetail from './routes/OpportunityDetail';
+import Projects from './routes/Projects';
+import ProjectDetail from './routes/ProjectDetail';
+import Profile from './routes/Profile';
+import EditProfile from './routes/EditProfile';
+import Onboarding from './routes/Onboarding';
+import SignIn from './routes/SignIn';
+import NotFound from './routes/NotFound';
 
 const App = () => {
   return (
-    <div className="page-shell">
-      <Header />
-      <main style={{ flex: 1 }}>
-        <Routes>
-          <Route path="/" element={<LandingPage />} />
-          <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/projects" element={<ProjectsPage />} />
-          <Route path="/projects/:slug" element={<ProjectDetailPage />} />
-          <Route path="/profile" element={<ProfilePage />} />
-          <Route path="/auth" element={<AuthPage />} />
-        </Routes>
-      </main>
-      <Footer />
-    </div>
+    <Routes>
+      <Route path="/" element={<Landing />} />
+      <Route path="/signin" element={<SignIn />} />
+      <Route path="/onboarding" element={<Onboarding />} />
+      <Route path="/profile" element={<Profile />} />
+      <Route path="/profile/edit" element={<EditProfile />} />
+      <Route path="/students" element={<Students />} />
+      <Route path="/students/:id" element={<StudentProfile />} />
+      <Route path="/students/:id/portfolio/:itemId" element={<PortfolioDetail />} />
+      <Route path="/projects" element={<Projects />} />
+      <Route path="/projects/:id" element={<ProjectDetail />} />
+      <Route path="/opportunities" element={<Opportunities />} />
+      <Route path="/opportunities/:id" element={<OpportunityDetail />} />
+      <Route path="*" element={<NotFound />} />
+    </Routes>
   );
 };
 
