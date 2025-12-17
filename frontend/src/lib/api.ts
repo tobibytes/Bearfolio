@@ -1,10 +1,6 @@
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5180/graphql';
+const defaultApi = typeof window !== 'undefined' ? `${window.location.origin}/graphql` : 'http://localhost:5180/graphql';
+const API_URL = import.meta.env.VITE_API_URL || defaultApi;
 export const API_BASE = API_URL.replace(/\/graphql$/, '');
-
-let authToken: string | null = null;
-export const setAuthToken = (token: string | null) => {
-  authToken = token;
-};
 
 type GraphQLResponse<T> = { data?: T; errors?: { message: string }[] };
 
@@ -12,12 +8,10 @@ async function fetchGraphQL<T>(query: string, variables?: Record<string, unknown
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 5000);
   try {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (authToken) headers.Authorization = `Bearer ${authToken}`;
     const res = await fetch(API_URL, {
       method: 'POST',
-      headers,
-      credentials: authToken ? 'include' : 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({ query, variables }),
       signal: controller.signal,
     });

@@ -1,6 +1,6 @@
 import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from 'react';
 import { Student, PortfolioItem } from '../mock';
-import { fetchRemoteStudents, RemoteStudent, setAuthToken, fetchMyProfile, API_BASE } from '../lib/api';
+import { fetchRemoteStudents, RemoteStudent, fetchMyProfile, API_BASE } from '../lib/api';
 
 type AuthContextValue = {
   user: Student | null;
@@ -81,7 +81,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [overrides, setOverrides] = useState<Partial<Student> | undefined>(undefined);
   const [onboarded, setOnboarded] = useState(false);
   const [remoteStudents, setRemoteStudents] = useState<Student[]>([]);
-  const [token, setToken] = useState<string | null>(null);
   const [profileId, setProfileId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -91,23 +90,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const ov = localStorage.getItem(overrideKey(stored));
       if (ov) setOverrides(JSON.parse(ov));
     }
-    const storedToken = localStorage.getItem('bearfolio_token');
-    if (storedToken) {
-      setToken(storedToken);
-      setAuthToken(storedToken);
-      fetchMyProfile()
-        .then((me) => {
-          if (me) {
-            const mapped = mapRemoteStudent(me as any);
-            setProfileId(me.id);
-            setOverrides(mapped);
-            setUserId(mapped.id);
-            setOnboarded(me.onboarded || false);
-            localStorage.setItem('bearfolio_user', mapped.id);
-          }
-        })
-        .catch(() => {});
-    }
+    fetchMyProfile()
+      .then((me) => {
+        if (me) {
+          const mapped = mapRemoteStudent(me as any);
+          setProfileId(me.id);
+          setOverrides(mapped);
+          setUserId(mapped.id);
+          setOnboarded(me.onboarded || false);
+          localStorage.setItem('bearfolio_user', mapped.id);
+        }
+      })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -132,20 +126,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const ov = ovRaw ? JSON.parse(ovRaw) : undefined;
       setOverrides(ov);
       const found = allStudents.find((s) => s.id === target) || null;
-      
-      if (token) {
-        fetchMyProfile().then((me) => {
-          if (me) {
-            setOnboarded(me.onboarded || false);
-          }
-        }).catch(() => {
-          setOnboarded(Boolean(localStorage.getItem(onboardKey(target))));
-        });
-      } else {
-        setOnboarded(Boolean(localStorage.getItem(onboardKey(target))));
-      }
-      
-      return { user: found ? mergeUser(found, ov) : null, onboarded: Boolean(localStorage.getItem(onboardKey(target))) };
+      fetchMyProfile()
+        .then((me) => setOnboarded(me?.onboarded || false))
+        .catch(() => setOnboarded(Boolean(localStorage.getItem(onboardKey(target)))));
+      return { user: found ? mergeUser(found, ov) : null, onboarded };
     }
     return { user: null, onboarded: false };
   };
@@ -188,12 +172,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           })
             .then((res) => (res.ok ? res.json() : Promise.reject(new Error('exchange_failed'))))
             .then((resp) => {
-              const appToken = resp.token as string | undefined;
-              if (appToken) {
-                setToken(appToken);
-                setAuthToken(appToken);
-                localStorage.setItem('bearfolio_token', appToken);
-              }
               const mapped: Student = {
                 id: generatedId,
                 name: decoded.name || decoded.email || 'Student',
@@ -221,12 +199,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                   setUserId(mappedMe.id);
                   setProfileId(me.id);
                   setOnboarded(me.onboarded || false);
-                  resolve({ user: mappedMe, onboarded: me.onboarded || false });
-                } else {
-                  setOnboarded(false);
-                  resolve({ user: mapped, onboarded: false });
-                }
-              }).catch(() => {
+              resolve({ user: mappedMe, onboarded: me.onboarded || false });
+            } else {
+              setOnboarded(false);
+              resolve({ user: mapped, onboarded: false });
+            }
+          }).catch(() => {
                 setOnboarded(false);
                 resolve({ user: mapped, onboarded: false });
               });
@@ -243,9 +221,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setOverrides(undefined);
     setOnboarded(false);
     localStorage.removeItem('bearfolio_user');
-    localStorage.removeItem('bearfolio_token');
-    setToken(null);
-    setAuthToken(null);
     fetch(`${API_BASE}/auth/logout`, { method: 'POST', credentials: 'include' }).catch(() => {});
   };
 
@@ -263,7 +238,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, onboarded, token, signIn, signInWithGoogle, signOut, completeOnboarding, updateUser }}>
+    <AuthContext.Provider value={{ user, onboarded, token: null, signIn, signInWithGoogle, signOut, completeOnboarding, updateUser }}>
       {children}
     </AuthContext.Provider>
   );
