@@ -1,12 +1,14 @@
-import { LogIn, Shield } from 'lucide-react';
+import { LogIn, Shield, Loader2 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { PageShell } from '../components/PageShell';
 import { Card } from '../components/Card';
 import { useAuth } from '../context/AuthContext';
+import { useState } from 'react';
 
 const SignIn = () => {
-  const { signIn, onboarded } = useAuth();
+  const { signIn, onboarded, signInWithGoogle } = useAuth();
   const navigate = useNavigate();
+  const [busy, setBusy] = useState(false);
 
   const handleSignIn = () => {
     const result = signIn();
@@ -14,6 +16,18 @@ const SignIn = () => {
       navigate('/onboarding');
     } else {
       navigate('/profile');
+    }
+  };
+
+  const handleGoogle = async () => {
+    try {
+      setBusy(true);
+      const result = await signInWithGoogle();
+      if (!result.user) return;
+      if (!result.onboarded) navigate('/onboarding');
+      else navigate('/profile');
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -27,12 +41,19 @@ const SignIn = () => {
           <h1 className="text-2xl font-bold">Sign in to Bearfolio</h1>
           <p className="text-sm text-muted">Use your Morgan State Google account. Button is decorative for now.</p>
           <button
-            onClick={handleSignIn}
-            className="button-focus inline-flex w-full items-center justify-center gap-2 rounded-lg bg-ink px-4 py-3 text-sm font-semibold text-white shadow-card hover:shadow-none"
+            onClick={handleGoogle}
+            disabled={busy}
+            className="button-focus inline-flex w-full items-center justify-center gap-2 rounded-lg bg-ink px-4 py-3 text-sm font-semibold text-white shadow-card hover:shadow-none disabled:opacity-60"
           >
             <span className="rounded-full bg-white px-2 py-1 text-ink">G</span>
-            Sign in with Google
-            <LogIn size={16} />
+            {busy ? 'Signing in...' : 'Sign in with Google'}
+            {busy ? <Loader2 size={16} className="animate-spin" /> : <LogIn size={16} />}
+          </button>
+          <button
+            onClick={handleSignIn}
+            className="button-focus inline-flex w-full items-center justify-center gap-2 rounded-lg border border-border px-4 py-3 text-sm font-semibold hover:border-brand"
+          >
+            Continue as demo user
           </button>
           <p className="text-xs text-muted">
             By continuing, you agree to the student code of conduct and recruiter-friendly profile guidelines.

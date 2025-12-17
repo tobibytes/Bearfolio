@@ -7,11 +7,45 @@ import { Select } from '../components/Select';
 import { Avatar } from '../components/Avatar';
 import { PageShell } from '../components/PageShell';
 import { SkeletonRow } from '../components/Skeleton';
-import { PortfolioItemType, students } from '../mock';
+import { PortfolioItemType, PortfolioItem } from '../mock';
 import { Calendar, Filter, Sparkles } from 'lucide-react';
+import { fetchRemoteStudents, RemoteStudent } from '../lib/api';
 
 const typeList: PortfolioItemType[] = ['Software', 'Research', 'Design', 'Writing', 'Business', 'Engineering', 'Art', 'Health', 'Education', 'Community'];
 const formats = ['Paper', 'Poster', 'Deck', 'Video', 'Prototype', 'Gallery', 'Code', 'Report'];
+const fallbackHero = 'https://images.unsplash.com/photo-1503676260728-1c00da094a0b?auto=format&fit=crop&w=1200&q=80';
+
+const mapRemoteStudent = (remote: RemoteStudent) => {
+  const portfolioItems = (remote.portfolioItems || []).map<PortfolioItem>((p) => ({
+    id: p.id,
+    studentId: remote.id,
+    type: (p.type as any) || 'Software',
+    title: p.title,
+    summary: p.summary || 'Portfolio item summary coming soon.',
+    tags: p.tags || [],
+    updatedAt: p.updatedAt || new Date().toISOString(),
+    heroImageUrl: p.heroImageUrl || fallbackHero,
+    format: (p.format as any) || 'Report',
+    detailTemplate: 'CaseStudy',
+    links: [],
+  }));
+  return {
+    id: remote.id,
+    name: remote.name,
+    headline: remote.bio.slice(0, 120) || 'Student at Morgan State University',
+    bio: remote.bio || '',
+    year: 2025,
+    location: 'Baltimore, MD',
+    avatarUrl: remote.avatarUrl || '',
+    links: { github: '', linkedin: '', website: '', portfolio: '', email: '' },
+    strengths: remote.strengths || [],
+    fields: remote.fields || [],
+    interests: remote.interests || [],
+    skills: [],
+    portfolioItems,
+    featuredItemId: portfolioItems[0]?.id || '',
+  };
+};
 
 const Students = () => {
   const [params] = useSearchParams();
@@ -24,6 +58,16 @@ const Students = () => {
   const [yearFilter, setYearFilter] = useState<number | ''>('');
   const [sort, setSort] = useState('Most recent');
   const [loading, setLoading] = useState(false);
+  const [remoteStudents, setRemoteStudents] = useState<ReturnType<typeof mapRemoteStudent>[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchRemoteStudents()
+      .then((data) => {
+        setRemoteStudents(data.map(mapRemoteStudent));
+      })
+      .catch(() => setError('Could not load students from server.'));
+  }, []);
 
   useEffect(() => {
     setLoading(true);
@@ -32,11 +76,11 @@ const Students = () => {
     return () => clearTimeout(t);
   }, [query, typeFilter, fieldFilter, formatFilter, yearFilter, sort]);
 
-  const years = useMemo(() => Array.from(new Set(students.map((s) => s.year))).sort(), []);
-  const fields = useMemo(() => Array.from(new Set(students.flatMap((s) => s.fields))), []);
+  const years = useMemo(() => Array.from(new Set(remoteStudents.map((s) => s.year))).sort(), [remoteStudents]);
+  const fields = useMemo(() => Array.from(new Set(remoteStudents.flatMap((s) => s.fields))), [remoteStudents]);
 
   const filtered = useMemo(() => {
-    return students
+    return remoteStudents
       .map((student) => {
         const featured = student.portfolioItems.find((i) => i.id === student.featuredItemId) || student.portfolioItems[0];
         const latestUpdated = student.portfolioItems.reduce((acc, item) => {
@@ -67,7 +111,7 @@ const Students = () => {
         if (sort === 'Most items') return b.student.portfolioItems.length - a.student.portfolioItems.length;
         return a.latestUpdated - b.latestUpdated; // Most recent (smallest days)
       });
-  }, [fieldFilter, formatFilter, query, sort, typeFilter, yearFilter]);
+  }, [fieldFilter, formatFilter, query, remoteStudents, sort, typeFilter, yearFilter]);
 
   const toggleType = (type: string) => {
     setTypeFilter((prev) => (prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type]));
@@ -173,7 +217,9 @@ const Students = () => {
             </div>
           </div>
 
-          {loading ? (
+          {error ? (
+            <Card className="p-8 text-center text-sm text-red-600">{error}</Card>
+          ) : loading ? (
             <div className="grid gap-4 sm:grid-cols-2">
               {Array.from({ length: 4 }).map((_, i) => (
                 <Card key={i} className="p-4 space-y-3">
@@ -196,47 +242,46 @@ const Students = () => {
             <div className="grid gap-4 sm:grid-cols-2">
               {filtered.map(({ student, featured }) => (
                 <Card key={student.id} className="p-4 space-y-3">
-                  <div className="flex items-start gap-3 min-w-0">
+                  <div className="flex items-center gap-3 min-w-0">
                     <Avatar name={student.name} src={student.avatarUrl} />
-                    <div className="space-y-1 min-w-0">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <Link to={`/students/${student.id}`} className="text-lg font-semibold hover:text-brand">
-                          <span className="clamp-1">{student.name}</span>
+                    <div className="min-w-0 space-y-1">
+                      <div className="flex items-center gap-2">
+                        <Link to={`/students/${student.id}`} className="text-lg font-semibold hover:text-brand clamp-1">
+                          {student.name}
                         </Link>
                         <Badge tone="brand">{student.year}</Badge>
                       </div>
                       <p className="text-sm text-muted clamp-2">{student.headline}</p>
-                      <div className="flex flex-wrap gap-2 text-xs text-muted">
-                        {student.fields.map((f) => (
-                          <Badge key={f}>{f}</Badge>
-                        ))}
-                      </div>
                     </div>
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    {student.strengths.slice(0, 3).map((s) => (
+
+                  <div className="flex flex-wrap gap-2 text-xs text-muted">
+                    {student.fields.slice(0, 2).map((f) => (
+                      <Badge key={f}>{f}</Badge>
+                    ))}
+                    {student.strengths.slice(0, 2).map((s) => (
                       <Badge key={s} tone="blue">
                         {s}
                       </Badge>
                     ))}
                   </div>
+
                   {featured && (
-                    <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm">
-                      <div className="space-y-0.5 min-w-0">
-                        <p className="font-semibold text-ink clamp-1">Featured: {featured.title}</p>
-                        <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
-                          <Badge tone="orange">{featured.type}</Badge>
-                          <Badge tone="green">{featured.format}</Badge>
-                          <span>{featured.updatedAt}</span>
-                        </div>
+                    <div className="rounded-lg bg-slate-50 px-3 py-2 text-sm">
+                      <p className="font-semibold text-ink clamp-1">Featured: {featured.title}</p>
+                      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted">
+                        <Badge tone="orange">{featured.type}</Badge>
+                        <Badge tone="green">{featured.format}</Badge>
+                        <span>{featured.updatedAt}</span>
                       </div>
-                      <Calendar size={16} className="text-muted" />
                     </div>
                   )}
+
                   <div className="flex items-center justify-between text-xs text-muted">
                     <span>{student.portfolioItems.length} portfolio items</span>
                     <span>Updated recently</span>
                   </div>
+
                   <div className="flex gap-2 text-sm font-semibold">
                     <Link
                       to={`/students/${student.id}`}

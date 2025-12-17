@@ -6,12 +6,12 @@ import { Input } from '../components/Input';
 import { Select } from '../components/Select';
 import { PageShell } from '../components/PageShell';
 import { SkeletonRow } from '../components/Skeleton';
-import { opportunities, students } from '../mock';
+import { Opportunity } from '../mock';
 import { Filter, Search } from 'lucide-react';
+import { Avatar } from '../components/Avatar';
+import { fetchRemoteOpportunities, fetchRemotePortfolioItems, RemoteOpportunity, RemotePortfolioItem } from '../lib/api';
 
-const categories = Array.from(new Set(opportunities.map((o) => o.category)));
-const fields = Array.from(new Set(opportunities.flatMap((o) => o.fields)));
-const formats = Array.from(new Set(opportunities.flatMap((o) => o.formatDesired)));
+type OpportunityWithStatus = Opportunity & { status?: string };
 
 const Opportunities = () => {
   const [query, setQuery] = useState('');
@@ -20,6 +20,9 @@ const Opportunities = () => {
   const [format, setFormat] = useState('');
   const [sort, setSort] = useState('Newest');
   const [loading, setLoading] = useState(false);
+  const [remoteOpps, setRemoteOpps] = useState<OpportunityWithStatus[]>([]);
+  const [remoteProjects, setRemoteProjects] = useState<RemotePortfolioItem[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -27,12 +30,38 @@ const Opportunities = () => {
     return () => clearTimeout(t);
   }, [query, category, field, format, sort]);
 
+  useEffect(() => {
+    fetchRemoteOpportunities()
+      .then((data) => {
+        setRemoteOpps(
+          data.map((o) => ({
+            id: o.id,
+            title: o.title,
+            org: o.org,
+            category: o.category as any,
+            summary: (o as any).summary || 'Opportunity details coming soon.',
+            fields: o.fields,
+            tags: o.tags,
+            formatDesired: o.desiredFormats,
+            updatedAt: o.updatedAt,
+            status: o.status,
+          }))
+        );
+      })
+      .catch(() => setError('Could not load opportunities.'));
+    fetchRemotePortfolioItems()
+      .then((items) => {
+        setRemoteProjects(items);
+      })
+      .catch(() => {});
+  }, []);
+
   const filtered = useMemo(() => {
-    let list = opportunities.filter((o) => {
+    let list = remoteOpps.filter((o) => {
       const matchesQuery =
         query.trim() === '' ||
         o.title.toLowerCase().includes(query.toLowerCase()) ||
-        o.summary.toLowerCase().includes(query.toLowerCase());
+        o.summary?.toLowerCase().includes(query.toLowerCase());
       const matchesCategory = category === '' || o.category === category;
       const matchesField = field === '' || o.fields.includes(field);
       const matchesFormat = format === '' || o.formatDesired.includes(format);
@@ -41,7 +70,7 @@ const Opportunities = () => {
     if (sort === 'Newest') list = list.slice().reverse();
     if (sort === 'Name') list = list.sort((a, b) => a.title.localeCompare(b.title));
     return list;
-  }, [category, field, format, query, sort]);
+  }, [category, field, format, query, sort, remoteOpps]);
 
   return (
     <PageShell>
@@ -64,7 +93,7 @@ const Opportunities = () => {
             </div>
             <Select value={category} onChange={(e) => setCategory(e.target.value)} className="w-40">
               <option value="">Category</option>
-              {categories.map((c) => (
+              {Array.from(new Set(remoteOpps.map((o) => o.category))).map((c) => (
                 <option key={c} value={c}>
                   {c}
                 </option>
@@ -72,7 +101,7 @@ const Opportunities = () => {
             </Select>
             <Select value={field} onChange={(e) => setField(e.target.value)} className="w-40">
               <option value="">Field</option>
-              {fields.map((f) => (
+              {Array.from(new Set(remoteOpps.flatMap((o) => o.fields))).map((f) => (
                 <option key={f} value={f}>
                   {f}
                 </option>
@@ -80,7 +109,7 @@ const Opportunities = () => {
             </Select>
             <Select value={format} onChange={(e) => setFormat(e.target.value)} className="w-40">
               <option value="">Format desired</option>
-              {formats.map((f) => (
+              {Array.from(new Set(remoteOpps.flatMap((o) => o.formatDesired))).map((f) => (
                 <option key={f} value={f}>
                   {f}
                 </option>
@@ -93,7 +122,9 @@ const Opportunities = () => {
           </div>
         </Card>
 
-        {loading ? (
+        {error ? (
+          <Card className="p-8 text-center text-sm text-red-600">{error}</Card>
+        ) : loading ? (
           <div className="grid gap-4 md:grid-cols-2">
             {Array.from({ length: 4 }).map((_, i) => (
               <Card key={i} className="p-4 space-y-3">
@@ -116,17 +147,17 @@ const Opportunities = () => {
                 </div>
                 <p className="text-sm text-muted leading-relaxed clamp-3">{opportunity.summary}</p>
                 <div className="flex flex-wrap gap-2">
-                  {opportunity.fields.map((f) => (
+                  {opportunity.fields.slice(0, 2).map((f) => (
                     <Badge key={f}>{f}</Badge>
                   ))}
-                  {opportunity.tags.map((tag) => (
+                  {opportunity.tags.slice(0, 2).map((tag) => (
                     <Badge key={tag} tone="blue">
                       {tag}
                     </Badge>
                   ))}
                 </div>
                 <div className="flex flex-wrap gap-2 text-xs text-muted">
-                  {opportunity.formatDesired.map((f) => (
+                  {opportunity.formatDesired.slice(0, 3).map((f) => (
                     <Badge key={f} tone="green">
                       {f}
                     </Badge>
@@ -156,6 +187,47 @@ const Opportunities = () => {
             ))}
           </div>
         )}
+
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-semibold">Projects by students</h2>
+            <Link to="/projects" className="text-sm font-semibold text-brand hover:underline">
+              View all
+            </Link>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            {remoteProjects.slice(0, 4).map((item) => {
+              return (
+                <Card key={item.id} className="p-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-semibold clamp-1">{item.title}</h3>
+                    <Badge tone="orange">{item.type}</Badge>
+                  </div>
+                  <p className="text-sm text-muted clamp-2">{item.summary}</p>
+                  <div className="flex items-center gap-2 text-xs text-muted">
+                    <span className="clamp-1">{(item as any).profile?.name || 'Student'}</span>
+                  </div>
+                  <div className="flex gap-2 text-sm font-semibold">
+                    <Link
+                      to={`/projects/${item.id}`}
+                      className="button-focus flex-1 rounded-lg border border-border px-3 py-2 text-center hover:border-brand"
+                    >
+                      View project
+                    </Link>
+                    { (item as any).profile?.id && (
+                      <Link
+                        to={`/students/${(item as any).profile.id}`}
+                        className="button-focus flex-1 rounded-lg bg-ink px-3 py-2 text-center text-white hover:shadow-card"
+                      >
+                        View student
+                      </Link>
+                    )}
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+        </div>
       </div>
     </PageShell>
   );

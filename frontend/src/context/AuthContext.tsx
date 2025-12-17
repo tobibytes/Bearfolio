@@ -1,10 +1,13 @@
 import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from 'react';
-import { students, Student } from '../mock';
+import { Student, PortfolioItem } from '../mock';
+import { fetchRemoteStudents, RemoteStudent, setAuthToken, fetchMyProfile, API_BASE } from '../lib/api';
 
 type AuthContextValue = {
   user: Student | null;
   onboarded: boolean;
+  token: string | null;
   signIn: (id?: string) => { user: Student | null; onboarded: boolean };
+  signInWithGoogle: () => Promise<{ user: Student | null; onboarded: boolean }>;
   signOut: () => void;
   completeOnboarding: () => void;
   updateUser: (partial: Partial<Student>) => void;
@@ -14,6 +17,52 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 const overrideKey = (id: string) => `bearfolio_user_override_${id}`;
 const onboardKey = (id: string) => `bearfolio_onboarded_${id}`;
+
+const mapRemoteStudent = (remote: RemoteStudent): Student => {
+  const links = (() => {
+    try {
+      return remote.linksJson ? JSON.parse(remote.linksJson) : {};
+    } catch {
+      return {};
+    }
+  })() as Student['links'];
+  const skills = (() => {
+    try {
+      return remote.skillsJson ? JSON.parse(remote.skillsJson) : [];
+    } catch {
+      return [];
+    }
+  })() as Student['skills'];
+  const portfolioItems = (remote.portfolioItems || []).map<PortfolioItem>((p) => ({
+    id: p.id,
+    studentId: remote.id,
+    type: (p.type as any) || 'Software',
+    title: p.title,
+    summary: p.summary || 'Portfolio item summary coming soon.',
+    tags: p.tags || [],
+    updatedAt: p.updatedAt || new Date().toISOString(),
+    heroImageUrl: p.heroImageUrl || 'https://images.unsplash.com/photo-1503676260728-1c00da094a0b?auto=format&fit=crop&w=1200&q=80',
+    format: (p.format as any) || 'Report',
+    detailTemplate: 'CaseStudy',
+    links: [],
+  }));
+  return {
+    id: remote.id,
+    name: remote.name,
+    headline: remote.headline || remote.bio.slice(0, 120) || 'Student at Morgan State University',
+    bio: remote.bio || '',
+    year: remote.year || 2025,
+    location: remote.location || 'Baltimore, MD',
+    avatarUrl: remote.avatarUrl || '',
+    links: { github: '', linkedin: '', website: '', portfolio: '', email: '', ...links },
+    strengths: remote.strengths || [],
+    fields: remote.fields || [],
+    interests: remote.interests || [],
+    skills: skills || [],
+    portfolioItems,
+    featuredItemId: portfolioItems[0]?.id || '',
+  };
+};
 
 const mergeUser = (base: Student, override?: Partial<Student>): Student => {
   return {
@@ -31,6 +80,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [userId, setUserId] = useState<string | null>(null);
   const [overrides, setOverrides] = useState<Partial<Student> | undefined>(undefined);
   const [onboarded, setOnboarded] = useState(false);
+  const [remoteStudents, setRemoteStudents] = useState<Student[]>([]);
+  const [token, setToken] = useState<string | null>(null);
+  const [profileId, setProfileId] = useState<string | null>(null);
 
   useEffect(() => {
     const stored = localStorage.getItem('bearfolio_user');
@@ -38,27 +90,152 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setUserId(stored);
       const ov = localStorage.getItem(overrideKey(stored));
       if (ov) setOverrides(JSON.parse(ov));
-      setOnboarded(Boolean(localStorage.getItem(onboardKey(stored))));
+    }
+    const storedToken = localStorage.getItem('bearfolio_token');
+    if (storedToken) {
+      setToken(storedToken);
+      setAuthToken(storedToken);
+      fetchMyProfile()
+        .then((me) => {
+          if (me) {
+            const mapped = mapRemoteStudent(me as any);
+            setProfileId(me.id);
+            setOverrides(mapped);
+            setUserId(mapped.id);
+            setOnboarded(me.onboarded || false);
+            localStorage.setItem('bearfolio_user', mapped.id);
+          }
+        })
+        .catch(() => {});
     }
   }, []);
 
-  const baseUser = useMemo(() => (userId ? students.find((s) => s.id === userId) || null : null), [userId]);
+  useEffect(() => {
+    fetchRemoteStudents()
+      .then((list) => setRemoteStudents(list.map(mapRemoteStudent)))
+      .catch(() => setRemoteStudents([]));
+  }, []);
+
+  const allStudents = useMemo(() => remoteStudents, [remoteStudents]);
+  const baseUser = useMemo(() => {
+    if (!userId) return null;
+    return allStudents.find((s) => s.id === userId) || null;
+  }, [allStudents, userId]);
   const user = useMemo(() => (baseUser ? mergeUser(baseUser, overrides) : null), [baseUser, overrides]);
 
   const signIn = (id?: string) => {
-    const target = id || students[0]?.id;
+    const target = id || allStudents[0]?.id;
     if (target) {
       setUserId(target);
       localStorage.setItem('bearfolio_user', target);
       const ovRaw = localStorage.getItem(overrideKey(target));
       const ov = ovRaw ? JSON.parse(ovRaw) : undefined;
       setOverrides(ov);
-      const ob = Boolean(localStorage.getItem(onboardKey(target)));
-      setOnboarded(ob);
-      const found = students.find((s) => s.id === target) || null;
-      return { user: found ? mergeUser(found, ov) : null, onboarded: ob };
+      const found = allStudents.find((s) => s.id === target) || null;
+      
+      if (token) {
+        fetchMyProfile().then((me) => {
+          if (me) {
+            setOnboarded(me.onboarded || false);
+          }
+        }).catch(() => {
+          setOnboarded(Boolean(localStorage.getItem(onboardKey(target))));
+        });
+      } else {
+        setOnboarded(Boolean(localStorage.getItem(onboardKey(target))));
+      }
+      
+      return { user: found ? mergeUser(found, ov) : null, onboarded: Boolean(localStorage.getItem(onboardKey(target))) };
     }
     return { user: null, onboarded: false };
+  };
+
+  const decodeJwt = (token: string) => {
+    const [, payload] = token.split('.');
+    const json = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
+    return json as { email?: string; name?: string; picture?: string; sub?: string };
+  };
+
+  const signInWithGoogle = async () => {
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+    if (!clientId) {
+      console.warn('Missing VITE_GOOGLE_CLIENT_ID');
+      return { user: null, onboarded: false };
+    }
+    if (!(window as any).google?.accounts?.id) {
+      await new Promise<void>((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = 'https://accounts.google.com/gsi/client';
+        script.async = true;
+        script.onload = () => resolve();
+        script.onerror = () => reject(new Error('Failed to load Google Identity'));
+        document.head.appendChild(script);
+      });
+    }
+
+    return await new Promise<{ user: Student | null; onboarded: boolean }>((resolve) => {
+      (window as any).google.accounts.id.initialize({
+        client_id: clientId,
+        callback: (response: { credential: string }) => {
+          const cred = response.credential;
+          const decoded = decodeJwt(cred);
+          const generatedId = decoded.sub || decoded.email || `google-${Date.now()}`;
+          fetch(`${API_BASE}/auth/exchange`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ idToken: cred }),
+          })
+            .then((res) => (res.ok ? res.json() : Promise.reject(new Error('exchange_failed'))))
+            .then((resp) => {
+              const appToken = resp.token as string | undefined;
+              if (appToken) {
+                setToken(appToken);
+                setAuthToken(appToken);
+                localStorage.setItem('bearfolio_token', appToken);
+              }
+              const mapped: Student = {
+                id: generatedId,
+                name: decoded.name || decoded.email || 'Student',
+                headline: 'Student at Morgan State University',
+                bio: '',
+                year: 2025,
+                location: 'Baltimore, MD',
+                avatarUrl: decoded.picture || '',
+                links: { email: decoded.email, github: '', linkedin: '', website: '', portfolio: '' },
+                strengths: [],
+                fields: [],
+                interests: [],
+                skills: [],
+                portfolioItems: [],
+                featuredItemId: '',
+              };
+              setUserId(generatedId);
+              localStorage.setItem('bearfolio_user', generatedId);
+              setOverrides(mapped);
+              
+              fetchMyProfile().then((me) => {
+                if (me) {
+                  const mappedMe = mapRemoteStudent(me as any);
+                  setOverrides(mappedMe);
+                  setUserId(mappedMe.id);
+                  setProfileId(me.id);
+                  setOnboarded(me.onboarded || false);
+                  resolve({ user: mappedMe, onboarded: me.onboarded || false });
+                } else {
+                  setOnboarded(false);
+                  resolve({ user: mapped, onboarded: false });
+                }
+              }).catch(() => {
+                setOnboarded(false);
+                resolve({ user: mapped, onboarded: false });
+              });
+            })
+            .catch(() => resolve({ user: null, onboarded: false }));
+        },
+      });
+      (window as any).google.accounts.id.prompt();
+    });
   };
 
   const signOut = () => {
@@ -66,6 +243,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setOverrides(undefined);
     setOnboarded(false);
     localStorage.removeItem('bearfolio_user');
+    localStorage.removeItem('bearfolio_token');
+    setToken(null);
+    setAuthToken(null);
+    fetch(`${API_BASE}/auth/logout`, { method: 'POST', credentials: 'include' }).catch(() => {});
   };
 
   const completeOnboarding = () => {
@@ -82,7 +263,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, onboarded, signIn, signOut, completeOnboarding, updateUser }}>
+    <AuthContext.Provider value={{ user, onboarded, token, signIn, signInWithGoogle, signOut, completeOnboarding, updateUser }}>
       {children}
     </AuthContext.Provider>
   );

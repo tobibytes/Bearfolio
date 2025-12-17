@@ -1,0 +1,10 @@
+.git
+**/bin
+**/obj
+**/TestResults
+.vs
+.vscode
+docker-compose.*
+Dockerfile.*
+artifacts
+node_modules

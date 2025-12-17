@@ -1,12 +1,13 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Github, Globe, Linkedin, Mail, MapPin, ExternalLink } from 'lucide-react';
+import { Github, Globe, Linkedin, Mail, MapPin, ExternalLink, Loader2 } from 'lucide-react';
 import { PageShell } from '../components/PageShell';
-import { students } from '../mock';
+import { PortfolioItem, Student } from '../mock';
 import { Avatar } from '../components/Avatar';
 import { Badge } from '../components/Badge';
 import { Tabs } from '../components/Tabs';
 import { Card } from '../components/Card';
+import { fetchRemoteStudent, RemoteStudent } from '../lib/api';
 
 const formatIcon = (format: string) => {
   switch (format) {
@@ -30,10 +31,81 @@ const formatIcon = (format: string) => {
   }
 };
 
+const fallbackHero = 'https://images.unsplash.com/photo-1503676260728-1c00da094a0b?auto=format&fit=crop&w=1200&q=80';
+const mapRemoteStudent = (remote: RemoteStudent): Student => {
+  const links = (() => {
+    try {
+      return remote.linksJson ? JSON.parse(remote.linksJson) : {};
+    } catch {
+      return {};
+    }
+  })() as Student['links'];
+  const skills = (() => {
+    try {
+      return remote.skillsJson ? JSON.parse(remote.skillsJson) : [];
+    } catch {
+      return [];
+    }
+  })() as Student['skills'];
+  const portfolioItems = (remote.portfolioItems || []).map<PortfolioItem>((p) => ({
+    id: p.id,
+    studentId: remote.id,
+    type: (p.type as any) || 'Software',
+    title: p.title,
+    summary: p.summary || 'Portfolio item summary coming soon.',
+    tags: p.tags || [],
+    updatedAt: p.updatedAt || new Date().toISOString(),
+    heroImageUrl: p.heroImageUrl || fallbackHero,
+    format: (p.format as any) || 'Report',
+    detailTemplate: 'CaseStudy',
+    links: [],
+  }));
+  return {
+    id: remote.id,
+    name: remote.name,
+    headline: remote.headline || remote.bio.slice(0, 120) || 'Student at Morgan State University',
+    bio: remote.bio || '',
+    year: remote.year || 2025,
+    location: remote.location || 'Baltimore, MD',
+    avatarUrl: remote.avatarUrl || '',
+    links: { github: '', linkedin: '', website: '', portfolio: '', email: '', ...links },
+    strengths: remote.strengths || [],
+    fields: remote.fields || [],
+    interests: remote.interests || [],
+    skills: skills || [],
+    portfolioItems,
+    featuredItemId: portfolioItems[0]?.id || '',
+  };
+};
+
 const StudentProfile = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const student = students.find((s) => s.id === id);
+  const [student, setStudent] = useState<Student | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!id) return;
+    setLoading(true);
+    fetchRemoteStudent(id)
+      .then((data) => {
+        if (data) {
+          setStudent(mapRemoteStudent(data));
+        }
+      })
+      .catch(() => setStudent(null))
+      .finally(() => setLoading(false));
+  }, [id]);
+
+  if (loading) {
+    return (
+      <PageShell>
+        <Card className="p-8 flex items-center gap-3 text-muted">
+          <Loader2 size={18} className="animate-spin" /> Loading profile...
+        </Card>
+      </PageShell>
+    );
+  }
 
   if (!student) {
     return (

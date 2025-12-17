@@ -26,6 +26,9 @@ export const Navbar = () => {
           <NavLink to="/students" className={({ isActive }) => (isActive ? 'text-ink' : '')}>
             Students
           </NavLink>
+          <NavLink to="/projects" className={({ isActive }) => (isActive ? 'text-ink' : '')}>
+            Projects
+          </NavLink>
           <NavLink to="/opportunities" className={({ isActive }) => (isActive ? 'text-ink' : '')}>
             Opportunities
           </NavLink>

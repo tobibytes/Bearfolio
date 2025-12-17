@@ -1,6 +1,6 @@
 interface Props {
   name: string;
-  src: string;
+  src?: string;
   size?: 'sm' | 'md' | 'lg';
 }
 
