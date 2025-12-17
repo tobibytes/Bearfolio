@@ -1,4 +1,5 @@
 using Pgvector;
+using HotChocolate;
 
 namespace Bearfolio.Api.Data;
 
@@ -65,6 +66,8 @@ public class PortfolioItem : Auditable
     public string HeroImageUrl { get; set; } = string.Empty;
     public ItemState State { get; set; } = ItemState.Draft;
     public string LinksJson { get; set; } = "[]";
+    
+    [GraphQLIgnore]
     public Vector Embedding { get; set; } = new Vector(new float[384]);
 }
 

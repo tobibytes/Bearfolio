@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using NpgsqlTypes;
 
 namespace Bearfolio.Api.Data;
 
@@ -18,7 +19,7 @@ public class AppDbContext : DbContext
         b.Entity<User>().HasIndex(x => x.Email).IsUnique();
         b.Entity<PortfolioItem>().Property(x => x.Embedding).HasColumnType("vector(384)");
         b.Entity<PortfolioItem>().HasIndex(x => x.Embedding).HasMethod("ivfflat");
-        b.Entity<PortfolioItem>().Property<string>("SearchVector").HasColumnType("tsvector")
+        b.Entity<PortfolioItem>().Property<NpgsqlTsVector>("SearchVector").HasColumnType("tsvector")
             .HasComputedColumnSql("to_tsvector('english', coalesce(\"Title\", '') || ' ' || coalesce(\"Summary\", ''))", stored: true);
         b.Entity<PortfolioItem>().HasIndex("SearchVector").HasMethod("gin");
         b.Entity<PortfolioItem>().HasQueryFilter(x => !x.IsDeleted);

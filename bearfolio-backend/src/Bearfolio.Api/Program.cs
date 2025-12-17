@@ -23,7 +23,8 @@ builder.Services.AddHttpContextAccessor();
 
 builder.Services.AddDbContext<AppDbContext>(opt =>
 {
-    opt.UseNpgsql(builder.Configuration.GetConnectionString("Postgres"), npg => npg.UseVector());
+    var connectionString = builder.Configuration.GetConnectionString("Postgres");
+    opt.UseNpgsql(connectionString, npg => npg.UseVector());
 });
 
 builder.Services.AddAuthentication(options =>
@@ -93,22 +94,6 @@ builder.Services.AddAuthentication(options =>
 builder.Services.AddAuthorization();
 builder.Services.AddAuthorizationPolicies();
 
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("frontend", policy =>
-    {
-        var origins = builder.Configuration["Cors:Origins"]?.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        if (origins is { Length: > 0 })
-        {
-            policy.WithOrigins(origins).AllowAnyHeader().AllowAnyMethod().AllowCredentials();
-        }
-        else
-        {
-            policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod();
-        }
-    });
-});
-
 builder.Services
     .AddGraphQLServer()
     .AddAuthorization()
@@ -118,7 +103,8 @@ builder.Services
     .AddProjections()
     .AddFiltering()
     .AddSorting()
-    .AddInMemorySubscriptions();
+    .AddInMemorySubscriptions()
+    .ModifyRequestOptions(opt => opt.IncludeExceptionDetails = builder.Environment.IsDevelopment());
 
 builder.Services.AddHealthChecks().AddNpgSql(builder.Configuration.GetConnectionString("Postgres")!);
 
@@ -137,13 +123,37 @@ builder.Services.AddOpenTelemetryTracingAndMetrics(builder.Configuration);
 
 var app = builder.Build();
 
+// Apply database migrations on startup
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    
+    try
+    {
+        logger.LogInformation("Applying database migrations...");
+        await db.Database.MigrateAsync();
+        logger.LogInformation("Database migrations applied successfully");
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "An error occurred while migrating the database");
+        throw;
+    }
+}
+
 app.UseSerilogRequestLogging();
 app.UseRouting();
-app.UseCors("frontend");
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapGraphQL("/graphql");
 app.MapHealthEndpoints();
+app.MapGet("/", () => Results.Redirect("/graphql"));
+app.MapGet("/health", () => Results.Ok("Healthy"));
+
+// Log sanitized Postgres connection string (mask credentials)
+var conn = builder.Configuration.GetConnectionString("Postgres") ?? string.Empty;
+app.Logger.LogInformation("Postgres connection: {Conn}", conn);
 
 app.Run();

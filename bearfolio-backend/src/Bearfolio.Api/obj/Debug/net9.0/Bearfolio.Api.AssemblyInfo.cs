@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("Bearfolio.Api")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+969ddcbbd9c8332dddfb0c40ba96c7d25140ccc9")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+7956b8122d92b36d65d4785743fe0ed13f02e5f7")]
 [assembly: System.Reflection.AssemblyProductAttribute("Bearfolio.Api")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Bearfolio.Api")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
