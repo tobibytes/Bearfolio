@@ -13,6 +13,7 @@ using System.Security.Claims;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
+var conn = builder.Configuration.GetConnectionString("Postgres") ?? string.Empty;
 
 builder.Host.UseSerilog((ctx, cfg) => cfg
     .ReadFrom.Configuration(ctx.Configuration)
@@ -122,6 +123,7 @@ builder.Services.AddHostedService<EmailWorker>();
 builder.Services.AddOpenTelemetryTracingAndMetrics(builder.Configuration);
 
 var app = builder.Build();
+app.Logger.LogInformation("Postgres connection: {Conn}", conn);
 
 // Apply database migrations on startup
 using (var scope = app.Services.CreateScope())
@@ -153,7 +155,5 @@ app.MapGet("/", () => Results.Redirect("/graphql"));
 app.MapGet("/health", () => Results.Ok("Healthy"));
 
 // Log sanitized Postgres connection string (mask credentials)
-var conn = builder.Configuration.GetConnectionString("Postgres") ?? string.Empty;
-app.Logger.LogInformation("Postgres connection: {Conn}", conn);
 
 app.Run();
